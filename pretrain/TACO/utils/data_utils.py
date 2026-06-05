@@ -28,6 +28,10 @@ from monai.config import KeysCollection
 import random
 from typing import Dict, List, Any
 
+MONAI_MAX_SEED = int(np.iinfo(np.uint32).max)
+monai.transforms.compose.MAX_SEED = min(monai.transforms.compose.MAX_SEED, MONAI_MAX_SEED)
+monai.transforms.transform.MAX_SEED = min(monai.transforms.transform.MAX_SEED, MONAI_MAX_SEED)
+
 
 ALL_MODALITIES = ['t1', 'flair', 't2', 't1c', 't1n', 't2f', 't2w','dwi', 'adc', 't2f','mra', 'pd']
 
@@ -91,65 +95,43 @@ class GetName():
 
 class Random2Modal():
 
-    def select_random_keys(self, batch, num_keys: int = 2, exclude_pattern: str = 'meta') -> List[str]:
-        # 过滤出不包含排除模式的key
-        filtered_keys = [key for key in [*batch] if exclude_pattern not in key.lower()]
-        # 检查是否有足够的key
-        if len(filtered_keys) == 0:
+    def select_random_images(self, data: Dict[str, Any], num_images: int) -> List[str]:
+        images = data.get("image", [])
+        if isinstance(images, str):
+            images = [images]
+        if len(images) == 0:
             return []
+        if len(images) >= num_images:
+            return random.sample(images, num_images)
+        return images + random.choices(images, k=num_images - len(images))
 
-        if len(filtered_keys) < num_keys:
-            return [filtered_keys[0],filtered_keys[0]]
-            # raise ValueError(f"只有 {len(filtered_keys)} 个可用key，但需要选择 {num_keys} 个")
-        
-        # 随机选择指定数量的key
-        selected_keys = random.sample(filtered_keys, num_keys)
-        return selected_keys
+    def __call__(self, data):
+        selected_images = self.select_random_images(data, 2)
+        if len(selected_images) < 2:
+            raise ValueError("Sample does not contain any image paths.")
+        return {
+            "modal1": selected_images[0],
+            "modal2": selected_images[1],
+            "modal1_path": selected_images[0],
+            "modal2_path": selected_images[1],
+        }
 
-    def __call__(self,data):
-        selected_keys = self.select_random_keys(data.keys())
-        if len(selected_keys) == 0:
-            print('bad data')
-            return {'modal1':'your_backup.nii.gz',
-            'modal2':'your_backup.nii.gz'}
-        data['modal1'] = data[selected_keys[0]]
-        data['modal2'] = data[selected_keys[1]]
-        allowed = {'modal1', 'modal2'}
-        data = {k: v for k, v in data.items() if k in allowed}
-        return data
+class Random4Modal(Random2Modal):
 
-class Random4Modal():
-
-    def select_random_keys(self, batch, num_keys: int = 4, exclude_pattern: str = 'meta') -> List[str]:
-
-        filtered_keys = [key for key in [*batch] if exclude_pattern not in key.lower()]
-        # 检查是否有足够的key
-        if len(filtered_keys) == 0:
-            return []
-
-        if len(filtered_keys) < num_keys:
-            print(f'length < {num_keys}')
-            return [filtered_keys[0],filtered_keys[0],filtered_keys[0],filtered_keys[0]]
-            # raise ValueError(f"只有 {len(filtered_keys)} 个可用key，但需要选择 {num_keys} 个")
-        
-        # 随机选择指定数量的key
-        selected_keys = random.sample(filtered_keys, num_keys)
-        return selected_keys
-
-    def __call__(self,data):
-        selected_keys = self.select_random_keys(data.keys())
-        if len(selected_keys) == 0:
-            print('bad data')
-            return {'modal1':'replace_your_backup.nii.gz',
-            'modal2':'replace_your_backup.nii.gz'}
-        print(selected_keys)
-        data['modal1'] = data[selected_keys[0]]
-        data['modal2'] = data[selected_keys[1]]
-        data['modal3'] = data[selected_keys[2]]
-        data['modal4'] = data[selected_keys[3]]
-        allowed = {'modal1', 'modal2','modal3','modal4'}
-        data = {k: v for k, v in data.items() if k in allowed}
-        return data
+    def __call__(self, data):
+        selected_images = self.select_random_images(data, 4)
+        if len(selected_images) < 4:
+            raise ValueError("Sample does not contain any image paths.")
+        return {
+            "modal1": selected_images[0],
+            "modal2": selected_images[1],
+            "modal3": selected_images[2],
+            "modal4": selected_images[3],
+            "modal1_path": selected_images[0],
+            "modal2_path": selected_images[1],
+            "modal3_path": selected_images[2],
+            "modal4_path": selected_images[3],
+        }
 
 class GetShape():
     def __call__(self,data):
@@ -168,14 +150,13 @@ from typing import Dict, Any
 
 def get_loader(args):
     data_dir = './'
-    datalist_json = '../pretrain_data_brainmvp_all.json'
+    datalist_json = 'pretrain_data.json'
     modal_keys = ['t1', 'flair', 't2', 't1c', 't1n', 't2f', 't2w','dwi', 'adc', 't2f','mra', 'pd']
-    # load_keys = modal_keys
     load_keys = ['modal1','modal2']
     train_transforms_list = [ 
             Random2Modal(),
             LoadImaged(keys=load_keys,reader="NibabelReader", ensure_channel_first=False,allow_missing_keys=True),
-            transforms.EnsureChannelFirstd(keys=load_keys,allow_missing_keys=True),
+            transforms.EnsureChannelFirstd(keys=load_keys, allow_missing_keys=True, channel_dim="no_channel"),
             Orientationd(keys=load_keys, axcodes="RSA",allow_missing_keys=True),
             # transforms.ScaleIntensityRangePercentilesd(keys=load_keys,lower=1, upper=99, b_min=0, b_max=1, clip=True,allow_missing_keys=True, channel_wise=True),
             transforms.NormalizeIntensityd(keys=load_keys,nonzero=True, channel_wise=True),
@@ -216,7 +197,7 @@ def get_loader(args):
 
 def get_test_loader(args):
     data_dir = './'
-    datalist_json = '../pretrain_data_brainmvp.json'
+    datalist_json = './test_data.json'
     modal_keys = ['t1', 'flair', 't2', 't1c', 't1n', 't2f', 't2w','dwi', 'adc', 't2f','mra', 'pd']
     # load_keys = modal_keys
     load_keys = ['modal1','modal2','modal3','modal4']
@@ -224,7 +205,7 @@ def get_test_loader(args):
             # GetName(),
             Random4Modal(),
             LoadImaged(keys=load_keys,reader="NibabelReader", ensure_channel_first=False,allow_missing_keys=True),
-            transforms.EnsureChannelFirstd(keys=load_keys,allow_missing_keys=True),
+            transforms.EnsureChannelFirstd(keys=load_keys, allow_missing_keys=True, channel_dim="no_channel"),
             Orientationd(keys=load_keys, axcodes="RSA",allow_missing_keys=True),
             transforms.ScaleIntensityRangePercentilesd(keys=load_keys,lower=1, upper=99, b_min=0, b_max=1, clip=True,allow_missing_keys=True, channel_wise=True),
             
@@ -256,11 +237,10 @@ def get_test_loader(args):
 def get_visual_loader(args):
     data_dir = './'
     datalist_json = 'seg_visual.json'
-    # load_keys = modal_keys
     load_keys = ['image','label']
     train_transforms_list = [
             LoadImaged(keys=load_keys,reader="NibabelReader", ensure_channel_first=False,allow_missing_keys=True),
-            transforms.EnsureChannelFirstd(keys=load_keys,allow_missing_keys=True),
+            transforms.EnsureChannelFirstd(keys=load_keys, allow_missing_keys=True, channel_dim="no_channel"),
             Orientationd(keys=load_keys, axcodes="RSA",allow_missing_keys=True),
             transforms.ScaleIntensityRangePercentilesd(keys=["image"],lower=1, upper=99, b_min=0, b_max=1, clip=True,allow_missing_keys=True, channel_wise=True),
             
