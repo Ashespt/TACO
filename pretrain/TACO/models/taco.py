@@ -305,7 +305,7 @@ class Taco(nn.Module):
     
     # def forward(self, img:dict,visual_flag:bool=False,step:int=0):
     def forward(self, x_in,visual_flag:bool=False,step:int=0):
-        x_in = torch.cat([img['src'],img['target']])
+        x_in = torch.cat([x_in['src'],x_in['target']])
         hidden_states_out,last_out = self.vit(x_in) 
         B = hidden_states_out[0].shape[0]
         # single modality
