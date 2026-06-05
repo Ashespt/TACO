@@ -110,8 +110,8 @@ class Random2Modal():
         selected_keys = self.select_random_keys(data.keys())
         if len(selected_keys) == 0:
             print('bad data')
-            return {'modal1':'/cpfs01/projects-HDD/cfff-2c3e596c4785_HDD/public/Lesion/BraTS2021/training_data/BraTS2021_00081/BraTS2021_00081_flair.nii.gz',
-            'modal2':'/cpfs01/projects-HDD/cfff-2c3e596c4785_HDD/public/Lesion/BraTS2021/training_data/BraTS2021_00081/BraTS2021_00081_t1.nii.gz'}
+            return {'modal1':'your_backup.nii.gz',
+            'modal2':'your_backup.nii.gz'}
         data['modal1'] = data[selected_keys[0]]
         data['modal2'] = data[selected_keys[1]]
         allowed = {'modal1', 'modal2'}
@@ -121,7 +121,7 @@ class Random2Modal():
 class Random4Modal():
 
     def select_random_keys(self, batch, num_keys: int = 4, exclude_pattern: str = 'meta') -> List[str]:
-        # 过滤出不包含排除模式的key
+
         filtered_keys = [key for key in [*batch] if exclude_pattern not in key.lower()]
         # 检查是否有足够的key
         if len(filtered_keys) == 0:
@@ -140,8 +140,8 @@ class Random4Modal():
         selected_keys = self.select_random_keys(data.keys())
         if len(selected_keys) == 0:
             print('bad data')
-            return {'modal1':'/cpfs01/projects-HDD/cfff-2c3e596c4785_HDD/public/Lesion/BraTS2021/training_data/BraTS2021_00081/BraTS2021_00081_flair.nii.gz',
-            'modal2':'/cpfs01/projects-HDD/cfff-2c3e596c4785_HDD/public/Lesion/BraTS2021/training_data/BraTS2021_00081/BraTS2021_00081_t1.nii.gz'}
+            return {'modal1':'replace_your_backup.nii.gz',
+            'modal2':'replace_your_backup.nii.gz'}
         print(selected_keys)
         data['modal1'] = data[selected_keys[0]]
         data['modal2'] = data[selected_keys[1]]
@@ -216,7 +216,7 @@ def get_loader(args):
 
 def get_test_loader(args):
     data_dir = './'
-    datalist_json = '../pretrain_data_brainmvp_all.json'
+    datalist_json = '../pretrain_data_brainmvp.json'
     modal_keys = ['t1', 'flair', 't2', 't1c', 't1n', 't2f', 't2w','dwi', 'adc', 't2f','mra', 'pd']
     # load_keys = modal_keys
     load_keys = ['modal1','modal2','modal3','modal4']
