@@ -27,7 +27,6 @@ from torch.utils.tensorboard import SummaryWriter
 from utils.data_utils import get_loader
 from utils.ops import aug_rand, rot_rand, monai_aug,img_monai_aug
 from monai.utils import set_determinism
-from utils.visualization import tsne_visual
 from utils.util import AverageMeter, distributed_all_gather
 from tqdm import tqdm
 from utils.ops import *
@@ -35,33 +34,6 @@ import matplotlib.pyplot as plt
 
 import random
 from typing import Dict, List, Any
-
-def select_random_keys(batch: Dict[str, Any], num_keys: int = 2, exclude_pattern: str = 'meta') -> List[str]:
-    """
-    从batch中随机选择不包含特定模式的key
-    
-    Args:
-        batch: 输入的数据字典
-        num_keys: 要选择的key数量
-        exclude_pattern: 要排除的模式字符串
-    
-    Returns:
-        随机选择的key列表
-    """
-    # 过滤出不包含排除模式的key
-    filtered_keys = [key for key in batch.keys() if exclude_pattern not in key.lower()]
-    
-    # 检查是否有足够的key
-    if len(filtered_keys) == 0:
-        return []
-
-    if len(filtered_keys) < num_keys:
-        return [filtered_keys[0],filtered_keys[0]]
-        # raise ValueError(f"只有 {len(filtered_keys)} 个可用key，但需要选择 {num_keys} 个")
-    
-    # 随机选择指定数量的key
-    selected_keys = random.sample(filtered_keys, num_keys)
-    return selected_keys
 
 def main():
     def save_ckp(state, checkpoint_dir):
@@ -75,15 +47,15 @@ def main():
 
         for step, batch in enumerate(train_loader):
             t1 = time()
-            # import pdb;pdb.set_trace()
             keys = ['modal1','modal2']
-            # keys = select_random_keys(batch)
-            # if len(keys) == 0:
-            #     print('bad data!')
-            #     continue
             src = batch[keys[0]].cuda()
             target = batch[keys[1]].cuda()
-            loss, loss_topo, loss_rec = model({'src':src,'target':target})
+            loss, loss_topo, loss_rec = model({
+                'src': src,
+                'target': target,
+                'src_path': batch.get('modal1_path'),
+                'target_path': batch.get('modal2_path'),
+            })
             
             if torch.isnan(loss).any() or torch.isinf(loss).any() or loss.item() > 1e5:
                 print(f"⚠️ [NaN/Inf/Overflow] loss={loss.item():.3e}")
@@ -176,8 +148,6 @@ def main():
     parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
     parser.add_argument("--data_type", default="data_1k", type=str,)
     parser.add_argument("--use_last_layer", action="store_true")
-    parser.add_argument("--use_geo", action="store_true")
-    parser.add_argument("--use_cl", action="store_true")
     parser.add_argument("--use_sharp", action="store_true")
     parser.add_argument("--random_seed", default=20, type=int, help="random seed")
     parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
@@ -188,8 +158,6 @@ def main():
     parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
     parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
     parser.add_argument("--space_z", default=1.5, type=float, help="spacing in z direction")
-    parser.add_argument("--alpha_domain", default=1, type=float, help="factor of domain loss")
-    parser.add_argument("--alpha_adv", default=1, type=float, help="factor of adversarial loss")
     parser.add_argument("--roi_large", default=288, type=int, help="roi size in x direction")
     parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
     parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
